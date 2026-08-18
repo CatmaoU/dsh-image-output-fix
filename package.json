@@ -1,7 +1,7 @@
 {
   "name": "dsh-image-output-fix",
-  "version": "0.1.0",
-  "description": "修复粘贴图片发送被核心自动转述为文本的 bug：禁用 DSH dsh-host-apiproxy 的 describeImagesWithVision 自动识图转述，保留图片附件原样发送，让 dsh-vision / Vision Router 等插件按需识图",
+  "version": "0.2.0",
+  "description": "修复粘贴图片发送被核心自动转述为文本的 bug：disables DSH dsh-host-apiproxy 的 describeImagesWithVision 自动识图转述并透传图片附件，由 dsh-vision-router 接管识图；未安装 dsh-vision-router 时自动安装其作为前置",
   "type": "module",
   "main": "lib/index.js",
   "files": [

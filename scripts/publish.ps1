@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $RepoName = "dsh-image-output-fix"
 $RepoFull = "CatmaoU/$RepoName"
 $RepoUrl = "https://github.com/$RepoFull.git"
-$Version = "0.1.0"
+$Version = "0.2.0"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
@@ -21,7 +21,7 @@ if (-not (Test-Path -LiteralPath ".git")) {
   git init
 }
 git add .
-git commit -m "fix: disable DSH core image auto-describe, keep image attachments" 2>$null
+git commit -m "fix: passthrough image blocks to dsh-vision-router (v0.2.0), fix agent-busy crash, auto-install vision-router" 2>$null
 
 # 2. ensure remote points to the real GitHub URL
 $hasRemote = git remote get-url origin 2>$null
@@ -56,7 +56,7 @@ $Tgz = Get-ChildItem -Path . -Filter "$RepoName-$Version.tgz" | Select-Object -F
 if ($null -eq $Tgz) {
   throw "npm pack output not found. Check npm executable: $Npm"
 }
-gh release create "v$Version" $Tgz.FullName --repo $RepoFull --notes "fix: disable DSH core image auto-describe, keep image attachments"
+gh release create "v$Version" $Tgz.FullName --repo $RepoFull --notes "fix: passthrough image blocks to dsh-vision-router, fix agent-busy crash, auto-install vision-router as prerequisite"
 
 Write-Host "Published: https://github.com/$RepoFull"
 Write-Host "DSH install command: dsh plugin --profile web add github:$RepoFull"
