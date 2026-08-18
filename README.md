@@ -6,6 +6,13 @@
 
 **v0.4.0** 的核心改动：把 `dsh-host-apiproxy` 的 `describeImagesWithVision` 函数体整体替换为**透传（return content）**，并把 `settings.yaml` 的 `vision-router.routing` 修正为 `true` —— 图片由 vision-router 视觉链接管识别，不再由 apiproxy 侧的转述短路掉。
 
+**v0.5.0** 的核心改动：settings.yaml **幂等自愈**（行级文本处理，零 YAML 依赖）。针对阿里云免费额度耗尽（403）与请求 hang 饿死视觉链的问题，启动时对 settings.yaml 做四处收敛，并把硅基流动（SiliconFlow）的 Qwen3-VL-32B-Instruct 作为视觉兜底链置于 aliyun 之前：
+
+- `vision-router.providers`：缺 `siliconflow` / `Qwen/Qwen3-VL-32B-Instruct` 则补到链首；若它在 aliyun 之后则重排为 `[siliconflow, aliyun, …其余保序]`。
+- `vision-router.visionTaskTimeoutMs`：缺失或 < 120000 时兜底为 120000（用户更大值如 180000 不动）。整链共享 wall-clock 预算，aliyun 请求 hang 会把兜底饿死，放宽预算让超时 abort 失效后端而不是饿死后续后端。
+- `vision-router.rewriteImages` / `dsh-vision.cache`：遇 `false` 收敛为 `true`，防历史图片块反复触发重新识图、烧视觉额度。
+- `llm-pi-ai.providers.siliconflow.models`：保证 `Qwen/Qwen3-VL-32B-Instruct` 存在且带 `name` / `input: [text, image]` 声明（缺失则补行）。
+
 ## 问题链路（为什么 v0.1.0 ~ v0.3.0 都不对）
 
 DSH 收到带图片的 prompt 时，`dsh-host-apiproxy`（约 2908 行起）先按会话当前模型能力分流：
@@ -28,6 +35,18 @@ resolveModelInfo(provider, model).inputModalities 含 image
 - **helper 只做透传**：`return content;` —— 图片以 durable attachment 进入消息轮，界面显示原图。
 - **settings.yaml 自动修正**：apply 时把 `vision-router.routing: false → true`（图片轮交由视觉链接管）、`dsh-vision.autoDescribe: true → false`（还原，v4 不再依赖自动转述）。设置 `DSH_IMAGE_OUTPUT_FIX_NO_SETTINGS=1` 可豁免。
 - **前提**：Vision Router 设置里 `providers` 已选识别模型（如 `aliyun/qwen3.7-flash`）、`textProvider` 为当前对话模型（如 `aliyun/deepseek-v4-flash-0731`）。本插件只保证图片不触发 pi-ai 硬拒，路由由 vision-router 完成。
+
+## v0.5.0 自愈细节
+
+- **为什么需要硅基流动兜底**：阿里云百炼免费额度耗尽会 403（`AllocationQuota.FreeTierOnly`），且付费生效前请求会 hang——vision-router 整链共享 wall-clock 预算（默认 45000ms），aliyun 挂起会耗尽预算把后续兜底饿死。硅基流动的 `Qwen/Qwen3-VL-32B-Instruct` 实测可正常识图，作为链首兜底。
+- **幂等**：对已合规的 settings.yaml **逐字节零改动**（测试用例保证）。行级处理不引入 YAML 序列化风险，任何一轮修复都只增删确定的行。
+- **防御重复烧额度**：`rewriteImages: true` + `cache: true` 后，历史图片块会被替换为「缓存描述 / 附件标记」而非重新识图；注意 imageMemory 是 vision-router 进程内 Map，DSH 重启即清空，重启后的新一轮会话仍可能重新识图（属平台行为）。
+
+## 验证（v0.5.0 自增检查）
+
+- 日志 `~/.dsh/logs/image-output-fix.log` 显示 `✓ settings.yaml 已符合 v0.5.0 要求`。
+- 对已合规配置重跑 `npm run patch-run`（dry）零改动。
+- 手改退化：把 providers 顺序颠倒、timeout 删掉、cache 改 false——重启后插件自动收敛回合规态。
 
 ## 凭据来源（v0.4.x 不读取明文 apiKey）
 

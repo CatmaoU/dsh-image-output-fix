@@ -1,7 +1,7 @@
 {
   "name": "dsh-image-output-fix",
-  "version": "0.4.1",
-  "description": "修复发图报 pi-ai does not support image input：把 dsh-host-apiproxy 的 describeImagesWithVision 替换为 v4 透传（图片原样保留进消息轮），并修正 settings.yaml 的 vision-router.routing 为 true，由 vision-router 视觉链（如 aliyun/qwen3.7-flash）识图、textProvider（如 deepseek-v4-flash）组织回答；识别鉴权使用 DSH credentials 服务的 ALIYUN_API_KEY 凭据，不读取 settings.yaml 明文 apiKey",
+  "version": "0.5.0",
+  "description": "修复发图报 pi-ai does not support image input：把 dsh-host-apiproxy 的 describeImagesWithVision 替换为 v4 透传（图片原样保留进消息轮）；v0.5.0 起 settings.yaml 幂等自愈——vision-router.providers 兜底硅基流动 Qwen3-VL-32B-Instruct 并置链首，visionTaskTimeoutMs 兜底 ≥120000（防 aliyun 请求 hang 饿死兜底链），rewriteImages/cache 收敛 true（防重复读图烧视觉额度），llm-pi-ai.siliconflow.models 补全输入声明；识别鉴权使用 DSH credentials 服务的凭据，不读取 settings.yaml 明文 apiKey",
   "type": "module",
   "main": "lib/index.js",
   "files": [
