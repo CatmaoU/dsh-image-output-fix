@@ -56,7 +56,7 @@ $Tgz = Get-ChildItem -Path . -Filter "$RepoName-$Version.tgz" | Select-Object -F
 if ($null -eq $Tgz) {
   throw "npm pack output not found. Check npm executable: $Npm"
 }
-gh release create "v$Version" $Tgz.FullName --notes "fix: disable DSH core image auto-describe, keep image attachments"
+gh release create "v$Version" $Tgz.FullName --repo $RepoFull --notes "fix: disable DSH core image auto-describe, keep image attachments"
 
 Write-Host "Published: https://github.com/$RepoFull"
 Write-Host "DSH install command: dsh plugin --profile web add github:$RepoFull"
