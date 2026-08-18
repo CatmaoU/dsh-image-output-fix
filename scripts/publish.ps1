@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $RepoName = "dsh-image-output-fix"
 $RepoFull = "CatmaoU/$RepoName"
 $RepoUrl = "https://github.com/$RepoFull.git"
-$Version = "0.3.0"
+$Version = "0.4.0"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
@@ -21,7 +21,7 @@ if (-not (Test-Path -LiteralPath ".git")) {
   git init
 }
 git add .
-git commit -m "fix: v3 conditional transcription via dsh-vision VLM for text-only models (UNSUPPORTED_CONTENT), replace v1/v2 short-circuits" 2>$null
+git commit -m "fix: v4 passthrough images to dsh-vision-router vision chain (routing=true), restore transcript images, replace v3 transcription" 2>$null
 
 # 2. ensure remote points to the real GitHub URL
 $hasRemote = git remote get-url origin 2>$null
@@ -51,12 +51,21 @@ git -c "url.$RepoUrl.insteadOf=$RepoUrl" push -u origin master
 # 6. npm pack
 & $Npm pack
 
-# 7. publish GitHub Release
+# 7. publish GitHub Release (notes from a temp file to avoid pwsh parsing issues)
 $Tgz = Get-ChildItem -Path . -Filter "$RepoName-$Version.tgz" | Select-Object -First 1
 if ($null -eq $Tgz) {
   throw "npm pack output not found. Check npm executable: $Npm"
 }
-gh release create "v$Version" $Tgz.FullName --repo $RepoFull --notes "v3: replace describeImagesWithVision with conditional transcription — text-only models get images transcribed via the configured dsh-vision VLM; image-capable models keep passthrough. Fixes 'pi-ai model does not support image input' (UNSUPPORTED_CONTENT). Overrides v0.1.0 (return null -> agent-busy) and v0.2.0 (return content -> pi-ai hard reject) short-circuits."
+$NotesPath = Join-Path $env:TEMP "dsh-image-output-fix-notes-$Version.md"
+@"
+v4: restore the user's expected image flow - images are sent as-is (kept in the transcript), text turns stay on the text provider (e.g. aliyun/deepseek-v4-flash), and image turns are routed by dsh-vision-router to the configured vision model (e.g. aliyun/qwen3.7-flash).
+
+- lib/index.js: describeImagesWithVision is replaced with a passthrough (return content); apply also fixes settings.yaml (vision-router.routing -> true, dsh-vision.autoDescribe -> false), overridable with DSH_IMAGE_OUTPUT_FIX_NO_SETTINGS=1.
+- Fixes 'pi-ai model does not support image input' (UNSUPPORTED_CONTENT) without replacing the user image with transcription text (v3) and without the v1 (return null -> agent-busy) / v2 (routing=false -> pi-ai hard reject) short-circuits.
+"@ | Set-Content -LiteralPath $NotesPath -Encoding UTF8
+
+gh release create "v$Version" $Tgz.FullName --repo $RepoFull --notes-file $NotesPath
+Remove-Item -LiteralPath $NotesPath -Force
 
 Write-Host "Published: https://github.com/$RepoFull"
 Write-Host "DSH install command: dsh plugin --profile web add github:$RepoFull"

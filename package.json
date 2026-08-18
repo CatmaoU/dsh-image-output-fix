@@ -1,7 +1,7 @@
 {
   "name": "dsh-image-output-fix",
-  "version": "0.3.0",
-  "description": "修复发图报 pi-ai does not support image input：把 dsh-host-apiproxy 的 describeImagesWithVision 替换为 v3 有条件识图转述——对话模型不支持图片时用已配置的识图模型（dsh-vision.model，如 aliyun/qwen3.7-flash）把图片转述为文字再发送，模型支持图片时图片原样直发",
+  "version": "0.4.0",
+  "description": "修复发图报 pi-ai does not support image input：把 dsh-host-apiproxy 的 describeImagesWithVision 替换为 v4 透传（图片原样保留进消息轮），并修正 settings.yaml 的 vision-router.routing 为 true，由 vision-router 视觉链（如 aliyun/qwen3.7-flash）识图、textProvider（如 deepseek-v4-flash）组织回答",
   "type": "module",
   "main": "lib/index.js",
   "files": [
