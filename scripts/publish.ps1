@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $RepoName = "dsh-image-output-fix"
 $RepoFull = "CatmaoU/$RepoName"
 $RepoUrl = "https://github.com/$RepoFull.git"
-$Version = "0.4.0"
+$Version = "0.4.1"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
@@ -58,10 +58,11 @@ if ($null -eq $Tgz) {
 }
 $NotesPath = Join-Path $env:TEMP "dsh-image-output-fix-notes-$Version.md"
 @"
-v4: restore the user's expected image flow - images are sent as-is (kept in the transcript), text turns stay on the text provider (e.g. aliyun/deepseek-v4-flash), and image turns are routed by dsh-vision-router to the configured vision model (e.g. aliyun/qwen3.7-flash).
+v4.1: explicit credential semantics - recognition auth goes through the DSH credentials service (ALIYUN_API_KEY stored via the Models page, ~/.dsh/.credentials.yaml); the plugin source contains no apiKey reading, no Authorization header and no network calls.
 
-- lib/index.js: describeImagesWithVision is replaced with a passthrough (return content); apply also fixes settings.yaml (vision-router.routing -> true, dsh-vision.autoDescribe -> false), overridable with DSH_IMAGE_OUTPUT_FIX_NO_SETTINGS=1.
-- Fixes 'pi-ai model does not support image input' (UNSUPPORTED_CONTENT) without replacing the user image with transcription text (v3) and without the v1 (return null -> agent-busy) / v2 (routing=false -> pi-ai hard reject) short-circuits.
+- lib/index.js: describeImagesWithVision replaced with passthrough (return content); apply fixes settings.yaml (vision-router.routing -> true, dsh-vision.autoDescribe -> false), overridable with DSH_IMAGE_OUTPUT_FIX_NO_SETTINGS=1.
+- apply now logs a credential diagnostic (v4.1): 'ALIYUN_API_KEY configured / missing'; dsh-vision.apiKey plaintext in settings.yaml is v3-era residue, never read by v0.4.x.
+- Fixes 'pi-ai model does not support image input' (UNSUPPORTED_CONTENT) while keeping the user image intact in the transcript (no v3 transcription) and without the v1 (return null -> agent-busy) / v2 (routing=false -> pi-ai hard reject) short-circuits.
 "@ | Set-Content -LiteralPath $NotesPath -Encoding UTF8
 
 gh release create "v$Version" $Tgz.FullName --repo $RepoFull --notes-file $NotesPath

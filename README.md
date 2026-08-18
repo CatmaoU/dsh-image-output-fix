@@ -29,6 +29,14 @@ resolveModelInfo(provider, model).inputModalities 含 image
 - **settings.yaml 自动修正**：apply 时把 `vision-router.routing: false → true`（图片轮交由视觉链接管）、`dsh-vision.autoDescribe: true → false`（还原，v4 不再依赖自动转述）。设置 `DSH_IMAGE_OUTPUT_FIX_NO_SETTINGS=1` 可豁免。
 - **前提**：Vision Router 设置里 `providers` 已选识别模型（如 `aliyun/qwen3.7-flash`）、`textProvider` 为当前对话模型（如 `aliyun/deepseek-v4-flash-0731`）。本插件只保证图片不触发 pi-ai 硬拒，路由由 vision-router 完成。
 
+## 凭据来源（v0.4.x 不读取明文 apiKey）
+
+识别模型的鉴权**完全交给 DSH 框架**：视觉链经 llm-pi-ai 的 credentials service 解析 `ALIYUN_API_KEY`（在「设置 → Models/模型设置」里保存后写入 `~/.dsh/.credentials.yaml`）。
+
+- 本插件源码**不含任何** `apiKey` 读取、`Authorization` 构造或网络请求逻辑（`grep apiKey|fetch(` 零匹配）。
+- `settings.yaml` 里 `dsh-vision.apiKey` 的明文只是 v0.3.0 时代的遗留参考，**v0.4.x 完全不读取**；即使该 key 已失效也不影响视觉链，可放心删除。
+- 启动日志会输出凭据诊断：`✓ 识别凭据 ALIYUN_API_KEY 已配置…` 或 `⚠ 未检测到凭据…`（见 `~/.dsh/logs/image-output-fix.log`）。
+
 ## 特性
 
 - **三处运行副本全覆盖**：`~/.dsh/profiles/node_modules`、`D:\dsh\resources\app\node_modules`、`%APPDATA%\DSH Desktop\agent\node_modules`（含 junction 去重，profiles 副本物理上指向 agent 目录者只写一份）。
@@ -56,7 +64,7 @@ resolveModelInfo(provider, model).inputModalities 含 image
 3. `vision-router.providers` 是否配置了识别模型（如 `aliyun/qwen3.7-flash`）？图片轮会切到它的视觉链。
 
 **Q：图片发出去但助手答不上来？**
-视觉链未命中：确认 Vision Router 设置（GUI：Vision Router 面板的 providers / textProvider / routing），以及识别模型 apiKey 是否有效。识别失败时错误会从 visual 链自然暴露。
+视觉链未命中：确认 Vision Router 设置（providers / textProvider / routing），以及 **`ALIYUN_API_KEY` 凭据是否在 DSH 模型设置页保存**（不是 settings.yaml 明文）。识别失败的错误会从视觉链自然暴露。
 
 **Q：为什么 v4 不做转述？**
 转述（v3）会把你的图片替换成文本块，转录里丢失原图。`routing: true` 后视觉链在模型输入层完成识别，消息历史仍保留图片附件。
