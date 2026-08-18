@@ -1,0 +1,30 @@
+{
+  "name": "dsh-image-output-fix",
+  "version": "0.1.0",
+  "description": "修复粘贴图片发送被核心自动转述为文本的 bug：禁用 DSH dsh-host-apiproxy 的 describeImagesWithVision 自动识图转述，保留图片附件原样发送，让 dsh-vision / Vision Router 等插件按需识图",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check": "node --check lib/index.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=22.19.0",
+    "dsh": ">=0.1.0-rc.5"
+  },
+  "license": "MIT"
+}

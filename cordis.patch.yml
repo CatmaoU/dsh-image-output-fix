@@ -1,0 +1,4 @@
+# dsh-image-output-fix：向组合挂 Node half，启动时禁用核心图片自动转述
+- insert:
+    - id: dsh-image-output-fix
+      name: dsh-image-output-fix
