@@ -1,35 +1,62 @@
-# dsh-image-output-fix 一键发布脚本
-# 作用：初始化 git -> 创建 GitHub 仓库 -> 推送 -> npm pack -> 发布 GitHub Release
-# 用法：在 PowerShell 中执行
+# dsh-image-output-fix one-shot publish script (ASCII only)
+# Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\publish.ps1
 $ErrorActionPreference = "Stop"
 
 $RepoName = "dsh-image-output-fix"
+$RepoFull = "CatmaoU/$RepoName"
+$RepoUrl = "https://github.com/$RepoFull.git"
 $Version = "0.1.0"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-# 1. git 初始化与提交
-if (-not (Test-Path ".git")) {
+# npm may not be on PATH; use the absolute Windows path.
+$Npm = "C:\Program Files\nodejs\npm.cmd"
+if (-not (Test-Path -LiteralPath $Npm)) {
+  $Npm = "npm"
+}
+
+# 1. git init and commit
+if (-not (Test-Path -LiteralPath ".git")) {
   git init
 }
 git add .
-git commit -m "fix: disable DSH core image auto-describe, keep image attachments"
+git commit -m "fix: disable DSH core image auto-describe, keep image attachments" 2>$null
 
-# 2. 创建 GitHub 仓库并推送
-# 如果仓库已存在，可改用：
-#   git remote add origin https://github.com/CatmaoU/$RepoName.git
-gh repo create $RepoName --public --source=. --remote=origin --push
+# 2. ensure remote points to the real GitHub URL
+$hasRemote = git remote get-url origin 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $hasRemote) {
+  git remote add origin $RepoUrl
+} else {
+  git remote set-url origin $RepoUrl
+}
 
-# 3. 构建 npm 包
-npm pack
+# 3. create repo only if it does not exist yet
+gh repo view $RepoFull >$null 2>$null
+if ($LASTEXITCODE -ne 0) {
+  gh repo create $RepoFull --public --source=. --remote=origin
+}
 
-# 4. 发布 GitHub Release
+# 4. make git use gh credentials
+gh auth setup-git
+
+# 5. push while bypassing the global gh-proxy insteadOf rewrite.
+#    The user-level .gitconfig contains:
+#      [url "https://v6.gh-proxy.org/https://github.com/"]
+#          insteadOf = https://github.com/
+#    A longer insteadOf rule matching the exact target URL makes Git pick it
+#    first, so push goes directly to github.com instead of the proxy.
+git -c "url.$RepoUrl.insteadOf=$RepoUrl" push -u origin master
+
+# 6. npm pack
+& $Npm pack
+
+# 7. publish GitHub Release
 $Tgz = Get-ChildItem -Path . -Filter "$RepoName-$Version.tgz" | Select-Object -First 1
 if ($null -eq $Tgz) {
-  throw "未找到 npm pack 产物"
+  throw "npm pack output not found. Check npm executable: $Npm"
 }
 gh release create "v$Version" $Tgz.FullName --notes "fix: disable DSH core image auto-describe, keep image attachments"
 
-Write-Host "发布完成：https://github.com/CatmaoU/$RepoName"
-Write-Host "DSH 安装命令：dsh plugin --profile web add github:CatmaoU/$RepoName"
+Write-Host "Published: https://github.com/$RepoFull"
+Write-Host "DSH install command: dsh plugin --profile web add github:$RepoFull"
