@@ -1,7 +1,7 @@
 {
   "name": "dsh-image-output-fix",
-  "version": "0.2.0",
-  "description": "修复粘贴图片发送被核心自动转述为文本的 bug：disables DSH dsh-host-apiproxy 的 describeImagesWithVision 自动识图转述并透传图片附件，由 dsh-vision-router 接管识图；未安装 dsh-vision-router 时自动安装其作为前置",
+  "version": "0.3.0",
+  "description": "修复发图报 pi-ai does not support image input：把 dsh-host-apiproxy 的 describeImagesWithVision 替换为 v3 有条件识图转述——对话模型不支持图片时用已配置的识图模型（dsh-vision.model，如 aliyun/qwen3.7-flash）把图片转述为文字再发送，模型支持图片时图片原样直发",
   "type": "module",
   "main": "lib/index.js",
   "files": [
@@ -15,7 +15,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "check": "node --check lib/index.js"
+    "check": "node --check lib/index.js",
+    "patch-run": "node scripts/patch-run.mjs"
   },
   "dsh": {
     "bundle": {
