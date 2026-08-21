@@ -1,7 +1,7 @@
 {
   "name": "dsh-image-output-fix",
-  "version": "0.5.0",
-  "description": "修复发图报 pi-ai does not support image input：把 dsh-host-apiproxy 的 describeImagesWithVision 替换为 v4 透传（图片原样保留进消息轮）；v0.5.0 起 settings.yaml 幂等自愈——vision-router.providers 兜底硅基流动 Qwen3-VL-32B-Instruct 并置链首，visionTaskTimeoutMs 兜底 ≥120000（防 aliyun 请求 hang 饿死兜底链），rewriteImages/cache 收敛 true（防重复读图烧视觉额度），llm-pi-ai.siliconflow.models 补全输入声明；识别鉴权使用 DSH credentials 服务的凭据，不读取 settings.yaml 明文 apiKey",
+  "version": "0.6.0",
+  "description": "DSH 发图链修复与原生视觉模型接管：v4 起把 dsh-host-apiproxy 的 describeImagesWithVision 替换为透传（图片原样进消息轮，vision-router 视觉链转述）；v0.5.0 起 settings.yaml 幂等自愈（硅基流动 VL-32B 兜底置链首 + visionTaskTimeoutMs≥120000 + rewriteImages/cache 收敛 + 防重复读图）；v0.6.0 起支持官方 DeepSeek-V4-Flash-Vision-Exp（及第三方渠道同名变体）原生视觉模型——宿主调用点豁免转述，图片原生进消息轮（DSH ≥0.1.1-rc.1 原生图片导入），仅纯文本模型（如 DeepSeek-V4-Flash）走 vision-router 视觉链转述；settings 自动补 input:[text,image] 声明并合并 extraVisionModels",
   "type": "module",
   "main": "lib/index.js",
   "files": [
@@ -16,6 +16,7 @@
   },
   "scripts": {
     "check": "node --check lib/index.js",
+    "self-test": "node scripts/v6-self-test.mjs",
     "patch-run": "node scripts/patch-run.mjs"
   },
   "dsh": {

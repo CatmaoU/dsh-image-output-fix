@@ -13,6 +13,13 @@
 - `vision-router.rewriteImages` / `dsh-vision.cache`：遇 `false` 收敛为 `true`，防历史图片块反复触发重新识图、烧视觉额度。
 - `llm-pi-ai.providers.siliconflow.models`：保证 `Qwen/Qwen3-VL-32B-Instruct` 存在且带 `name` / `input: [text, image]` 声明（缺失则补行）。
 
+**v0.6.0** 的核心改动：支持**官方原生视觉模型 DeepSeek-V4-Flash-Vision-Exp**（及第三方渠道同名/变体模型，如 `xxx运营商/DeepSeek-V4-Flash-Vision-Exp`）。这类模型本身能看图，DSH ≥ 0.1.1-rc.1 已支持**原生图片导入**，所以**不再转述**：
+
+- **宿主调用点豁免（v5 补丁）**：在 `describeImagesWithVision` 的调用点注入 `isDshImageOutputFixNativeVision(current.model)` 判断——会话模型名同时含 `flash` + `vision`（大小写不敏感，排除 embedding/reranker）时，跳过转述分支，图片以 durable attachment **原生进消息轮**，模型直接看图（省掉一次「图片 → 文本」转述的 token）。`DeepSeek-V4-Flash` 等纯文本模型行为不变：仍透传 + vision-router 视觉链转述。
+- **settings.yaml 自动声明**：
+  - `llm-pi-ai.providers.*.models`：为名称命中的条目补 `input: [ text, image ]`（第三方渠道据此放行多模态请求，宿主也据此判定模型支持图片）。
+  - `vision-router.extraVisionModels`：自动合并 `DeepSeek-V4-Flash-Vision-Exp` + 扫描到的全部变体（去重保序、幂等），vision-router 据此强制认定这些模型具备视觉能力，不再把它们的图片轮切走/改写成文本。
+
 ## 问题链路（为什么 v0.1.0 ~ v0.3.0 都不对）
 
 DSH 收到带图片的 prompt 时，`dsh-host-apiproxy`（约 2908 行起）先按会话当前模型能力分流：
@@ -41,6 +48,32 @@ resolveModelInfo(provider, model).inputModalities 含 image
 - **为什么需要硅基流动兜底**：阿里云百炼免费额度耗尽会 403（`AllocationQuota.FreeTierOnly`），且付费生效前请求会 hang——vision-router 整链共享 wall-clock 预算（默认 45000ms），aliyun 挂起会耗尽预算把后续兜底饿死。硅基流动的 `Qwen/Qwen3-VL-32B-Instruct` 实测可正常识图，作为链首兜底。
 - **幂等**：对已合规的 settings.yaml **逐字节零改动**（测试用例保证）。行级处理不引入 YAML 序列化风险，任何一轮修复都只增删确定的行。
 - **防御重复烧额度**：`rewriteImages: true` + `cache: true` 后，历史图片块会被替换为「缓存描述 / 附件标记」而非重新识图；注意 imageMemory 是 vision-router 进程内 Map，DSH 重启即清空，重启后的新一轮会话仍可能重新识图（属平台行为）。
+
+## v0.6.0 原生视觉模型（DeepSeek-V4-Flash-Vision-Exp）
+
+**背景**：官方新模型 `DeepSeek-V4-Flash-Vision-Exp` 原生支持图片输入；DSH ≥ 0.1.1-rc.1 支持原生图片导入（模型目录声明 `image` 能力后图片直接以多模态块发给模型）。此时若再经 vision-router 转述一遍（图片 → 文本）就是**双重处理、浪费 token**。
+
+**判定规则**（`isDshImageOutputFixNativeVision`，插件注入/导出，两处共用同一规则）：
+
+- 模型名同时包含单词 `flash` 与 `vision`（大小写不敏感）→ 原生视觉。覆盖官方名与任意第三方渠道变体：
+  - `DeepSeek-V4-Flash-Vision-Exp`
+  - `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp`
+  - `xxx运营商/DeepSeek-V4-Flash-Vision-Exp`、`DeepSeek-V4-Flash-Vision-Exp-xxx`
+- 名字含 `embedding` / `rerank` 等词 → 排除（向量端点不是生成模型）。
+- `DeepSeek-V4-Flash` / `deepseek-v4-pro` 等 → 不命中，保持转述链路（当且仅当纯文本模型不存在图片能力时）。
+
+**v5 宿主补丁（三件套，幂等）**：
+
+1. **调用点豁免**：`if (... && !isDshImageOutputFixNativeVision(current.model))` —— 原生视觉模型跳过 `describeImagesWithVision`，图片原生进消息轮。
+2. **helper 仍透传**：`return content;`（只被真·纯文本模型走到，交给 vision-router 视觉链）。
+3. **注入探测函数**：模块级 `isDshImageOutputFixNativeVision(model)`，与插件内 `lib/index.js` 的判定规则一致。
+
+**settings 自愈（幂等）**：
+
+- `llm-pi-ai.providers.*.models`：命中 Flash-Vision 的条目自动补 `input: [ text, image ]`（已有则不动）。
+- `vision-router.extraVisionModels`：自动合并官方名 + 扫描到的变体（既有项保序在前、新增在后、幂等）。vision-router 据此强制认定这些模型具备视觉能力，图片轮不再被切到视觉链或改写成文本。
+
+**已知边界**：vision-router 1.6.x 的 `agent/request` 层 legacy routing（`routing: true`）对含图轮是**无条件切链**的，且其 stealth 包装在无 `preserveImageInput` 时会改写图片块——这些行为不由本插件控制。本插件保证：宿主侧对原生视觉模型不再转述 + settings 声明让各层（含 vision-router 未来版本）识别其为视觉模型。若仍观察到图片轮被切走，请升级/配置 vision-router 的 `extraVisionModels`（本插件已自动写入）。
 
 ## 验证（v0.5.0 自增检查）
 
@@ -72,8 +105,9 @@ resolveModelInfo(provider, model).inputModalities 含 image
 ## 验证
 
 - 向纯文本模型（如 `aliyun/deepseek-v4-flash-0731`）发一张图片：应不再报 `does not support image input`；消息气泡保留你的原图；助手基于图片识别结果回答。
-- Vision Router 日志/路由：图片轮应切到 `vision-chain`（识别模型 `aliyun/qwen3.7-flash`），文本轮保持在 `aliyun/deepseek-v4-flash-0731`。
-- 日志：`~/.dsh/logs/image-output-fix.log` 应显示副本 `✔ 已替换为 v4 图片透传` 与 settings 修正记录。
+- 切换到 `DeepSeek-V4-Flash-Vision-Exp` 后发图：图片原生进入消息轮、**不经过任何转述**（日志应显示 `✓ 原生视觉模型识别：DeepSeek-V4-Flash-Vision-Exp…`，settings 中该模型出现在 `extraVisionModels` 且 models 目录带 `input: [ text, image ]`）。
+- Vision Router 日志/路由：纯文本模型图片轮应切到 `vision-chain`（识别模型 `aliyun/qwen3.7-flash`），文本轮保持在 `aliyun/deepseek-v4-flash-0731`。
+- 日志：`~/.dsh/logs/image-output-fix.log` 应显示副本 `✔ 已替换为 v5` 与 settings 修正记录。
 
 ## FAQ
 
@@ -82,11 +116,19 @@ resolveModelInfo(provider, model).inputModalities 含 image
 2. `settings.yaml` 的 `vision-router.routing` 是否为 `true`？（apply 会修；手工改也行）
 3. `vision-router.providers` 是否配置了识别模型（如 `aliyun/qwen3.7-flash`）？图片轮会切到它的视觉链。
 
+**Q：用 DeepSeek-V4-Flash-Vision-Exp 发图还被转述/切链？**
+1. 确认该模型在 `vision-router.extraVisionModels` 里（v0.6.0 apply 会自动写入；含第三方变体也一样命中）。
+2. 确认 `llm-pi-ai.providers.*.models` 中该模型带 `input: [ text, image ]` 声明（v0.6.0 自动补）。
+3. 若你的 vision-router 版本 legacy routing 对图片轮无条件切链（1.6.x 行为），升级 vision-router 或关闭 `routing` 改用 wrapper/rewrite 模式。
+
+**Q：什么情况下会走转述？**
+只有当会话模型**既不声明图片输入、名字也不命中原生视觉探测**时才转述（如 `DeepSeek-V4-Flash`）。转述链路 = 图片透传进消息轮 → vision-router 视觉链识别 → 纯文本模型基于识别结果回答。
+
 **Q：图片发出去但助手答不上来？**
 视觉链未命中：确认 Vision Router 设置（providers / textProvider / routing），以及 **`ALIYUN_API_KEY` 凭据是否在 DSH 模型设置页保存**（不是 settings.yaml 明文）。识别失败的错误会从视觉链自然暴露。
 
 **Q：为什么 v4 不做转述？**
-转述（v3）会把你的图片替换成文本块，转录里丢失原图。`routing: true` 后视觉链在模型输入层完成识别，消息历史仍保留图片附件。
+转述（v3）会把你的图片替换成文本块，转录里丢失原图。`routing: true` 后视觉链在模型输入层完成识别，消息历史仍保留图片附件。v0.6.0 更进一步：原生视觉模型连转述都不需要。
 
 ## License
 
